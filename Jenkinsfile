@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         PROJECT = "sylvan-hydra-464904-d9"
-        ZONE = "	us-central1-c"
+        ZONE = "us-central1-c"
         INSTANCE_NAME = "employee-app-vm"
         MACHINE_TYPE = "e2-medium"
         IMAGE_FAMILY = "debian-11"
