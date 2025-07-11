@@ -2,54 +2,68 @@ pipeline {
     agent any
 
     environment {
-        PROJECT = "sylvan-hydra-464904-d9"
-        ZONE = "us-central1-c"
-        INSTANCE_NAME = "employee-app-vm"
-        MACHINE_TYPE = "e2-medium"
-        IMAGE_FAMILY = "debian-11"
-        IMAGE_PROJECT = "debian-cloud"
-        DB_HOST = "34.56.155.20"
-        DB_USER = "new-user"
-        DB_PASSWORD = "12345678"
-        DB_NAME = "employee_db"
+        PROJECT_ID = 'sylvan-hydra-464904-d9'
+        ZONE = 'us-central1-c'
+        VM_NAME = 'employee-app-vm'
+        REPO_URL = 'https://github.com/Praveenarumugam07/employee-app.git'
     }
 
     stages {
-        stage('Create VM') {
+
+        stage('Create VM and Deploy App') {
             steps {
                 sh '''
-                echo "Creating VM instance..."
-                gcloud compute instances create $INSTANCE_NAME \
-                  --project=$PROJECT \
-                  --zone=$ZONE \
-                  --machine-type=$MACHINE_TYPE \
-                  --image-family=$IMAGE_FAMILY \
-                  --image-project=$IMAGE_PROJECT \
-                  --tags=http-server \
-                  --metadata startup-script='#! /bin/bash
+                echo "Creating VM and deploying app..."
+
+                gcloud compute instances create $VM_NAME \
+                    --project=$PROJECT_ID \
+                    --zone=$ZONE \
+                    --machine-type=e2-medium \
+                    --image-family=debian-11 \
+                    --image-project=debian-cloud \
+                    --tags=http-server \
+                    --metadata=startup-script='#! /bin/bash
                     apt update
                     apt install -y python3-pip git
                     pip3 install flask mysql-connector-python
-                    git clone https://github.com/YOUR_USERNAME/employee-app.git
+
+                    # Clone repo
+                    git clone ${REPO_URL}
                     cd employee-app
-                    sed -i "s/YOUR_MYSQL_IP/$DB_HOST/" app.py
-                    sed -i "s/YOUR_DB_USER/$DB_USER/" app.py
-                    sed -i "s/YOUR_DB_PASSWORD/$DB_PASSWORD/" app.py
-                    sed -i "s/YOUR_DB_NAME/$DB_NAME/" app.py
-                    nohup python3 app.py &'
+
+                    # Install requirements if requirements.txt exists
+                    if [ -f "requirements.txt" ]; then
+                        pip3 install -r requirements.txt
+                    fi
+
+                    # Replace DB details if needed
+                    # sed -i "s/YOUR_MYSQL_IP/$DB_HOST/" app.py
+
+                    # Modify app.py to run on port 80 (requires root)
+                    sed -i "s/app.run(/app.run(host=\"0.0.0.0\", port=80, /" app.py
+
+                    # Run app on port 80
+                    nohup python3 app.py &
+                    '
                 '''
             }
         }
 
-        stage('Allow Firewall') {
+        stage('Allow HTTP Traffic') {
             steps {
                 sh '''
-                echo "Allowing firewall for port 5000..."
-                gcloud compute firewall-rules create allow-http-5000 \
-                  --allow tcp:5000 \
-                  --target-tags http-server \
-                  --description "Allow port 5000" \
-                  --project=$PROJECT || echo "Rule may already exist"
+                echo "Allowing HTTP traffic on port 80..."
+
+                # Create firewall rule if not existing
+                if ! gcloud compute firewall-rules list --filter="name=allow-http-80" --format="value(name)" | grep -q 'allow-http-80'; then
+                    gcloud compute firewall-rules create allow-http-80 \
+                        --allow tcp:80 \
+                        --target-tags http-server \
+                        --description="Allow HTTP traffic on port 80" \
+                        --project=$PROJECT_ID
+                else
+                    echo "Firewall rule already exists."
+                fi
                 '''
             }
         }
@@ -58,18 +72,20 @@ pipeline {
             steps {
                 sh '''
                 echo "Application deployed successfully."
-                gcloud compute instances list --filter="name=($INSTANCE_NAME)"
+                echo "VM details:"
+                gcloud compute instances list --filter="name=($VM_NAME)"
                 '''
             }
         }
+
     }
 
     post {
         success {
-            echo '✅ Deployment pipeline completed successfully.'
+            echo "✅ Deployment pipeline completed successfully. Visit your VM external IP to see the application."
         }
         failure {
-            echo '❌ Deployment pipeline failed.'
+            echo "❌ Deployment pipeline failed. Check logs for details."
         }
     }
 }
