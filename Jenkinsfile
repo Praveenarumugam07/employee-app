@@ -10,11 +10,19 @@ pipeline {
 
     stages {
 
+        stage('Checkout Code') {
+            steps {
+                // Checkout your repository containing startup-script.sh
+                git credentialsId: 'github', url: "${REPO_URL}"
+            }
+        }
+
         stage('Create VM and Deploy App') {
             steps {
                 sh '''
                 echo "Creating VM and deploying app..."
 
+                # Create VM with startup-script.sh
                 gcloud compute instances create $VM_NAME \
                     --project=$PROJECT_ID \
                     --zone=$ZONE \
@@ -22,29 +30,7 @@ pipeline {
                     --image-family=debian-11 \
                     --image-project=debian-cloud \
                     --tags=http-server \
-                    --metadata=startup-script='#! /bin/bash
-                    apt update
-                    apt install -y python3-pip git
-                    pip3 install flask mysql-connector-python
-
-                    # Clone repo
-                    git clone ${REPO_URL}
-                    cd employee-app
-
-                    # Install requirements if requirements.txt exists
-                    if [ -f "requirements.txt" ]; then
-                        pip3 install -r requirements.txt
-                    fi
-
-                    # Replace DB details if needed
-                    # sed -i "s/YOUR_MYSQL_IP/$DB_HOST/" app.py
-
-                    # Modify app.py to run on port 80 (requires root)
-                    sed -i "s/app.run(/app.run(host=\"0.0.0.0\", port=80, /" app.py
-
-                    # Run app on port 80
-                    nohup python3 app.py &
-                    '
+                    --metadata-from-file startup-script=startup-script.sh
                 '''
             }
         }
@@ -54,7 +40,7 @@ pipeline {
                 sh '''
                 echo "Allowing HTTP traffic on port 80..."
 
-                # Create firewall rule if not existing
+                # Create firewall rule if not exists
                 if ! gcloud compute firewall-rules list --filter="name=allow-http-80" --format="value(name)" | grep -q 'allow-http-80'; then
                     gcloud compute firewall-rules create allow-http-80 \
                         --allow tcp:80 \
@@ -71,8 +57,7 @@ pipeline {
         stage('Deployment Complete') {
             steps {
                 sh '''
-                echo "Application deployed successfully."
-                echo "VM details:"
+                echo "✅ Application deployed successfully. VM details:"
                 gcloud compute instances list --filter="name=($VM_NAME)"
                 '''
             }
