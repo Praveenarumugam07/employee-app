@@ -10,10 +10,10 @@ def employee():
         email = request.form['email']
 
         conn = mysql.connector.connect(
-            host='YOUR_MYSQL_IP',
-            user='YOUR_DB_USER',
-            password='YOUR_DB_PASSWORD',
-            database='YOUR_DB_NAME'
+            host='34.56.155.20',
+            user='new-user',
+            password='12345678',
+            database='employee-db'
         )
         cursor = conn.cursor()
         cursor.execute("INSERT INTO employees (name, email) VALUES (%s, %s)", (name, email))
